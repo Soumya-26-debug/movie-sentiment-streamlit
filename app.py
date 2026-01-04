@@ -1,54 +1,62 @@
 import streamlit as st
-import nltk
-from nltk.corpus import movie_reviews
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.svm import SVC
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from transformers import pipeline
 
-st.set_page_config(page_title="Movie Sentiment Analysis", page_icon="🎬")
+# ------------------ PAGE CONFIG ------------------
+st.set_page_config(
+    page_title="Emotion Analysis using BERT",
+    page_icon="🎭",
+    layout="centered"
+)
 
-st.title("🎬 Movie Review Sentiment Analysis")
+st.title("🎭 Movie Review Emotion Analysis")
+st.write(
+    "This application uses a **Transformer (BERT-based) model** to understand "
+    "the **emotion behind movie reviews**, not just positive or negative sentiment."
+)
 
+# ------------------ LOAD MODEL ------------------
 @st.cache_resource
-def download_nltk():
-    nltk.download('movie_reviews')
-    nltk.download('punkt')
-
-download_nltk()
-
-@st.cache_resource
-def train_model():
-    documents = []
-    labels = []
-
-    for category in movie_reviews.categories():
-        for fileid in movie_reviews.fileids(category):
-            documents.append(movie_reviews.raw(fileid))
-            labels.append(1 if category == "pos" else 0)
-
-    vectorizer = TfidfVectorizer(stop_words='english', max_features=10000)
-    X = vectorizer.fit_transform(documents)
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, labels, test_size=0.2, random_state=50
+def load_emotion_model():
+    return pipeline(
+        "text-classification",
+        model="j-hartmann/emotion-english-distilroberta-base",
+        return_all_scores=True
     )
 
-    model = SVC(kernel='linear')
-    model.fit(X_train, y_train)
+emotion_classifier = load_emotion_model()
 
-    accuracy = accuracy_score(y_test, model.predict(X_test))
-    return model, vectorizer, accuracy
+# ------------------ USER INPUT ------------------
+review = st.text_area(
+    "✍ Enter your movie review:",
+    placeholder="Example: The movie was slow but the climax was brilliant"
+)
 
-model, vectorizer, accuracy = train_model()
-st.info(f"Model Accuracy: {accuracy:.2f}")
-
-review = st.text_area("Enter movie review")
-
-if st.button("Predict Sentiment"):
+# ------------------ PREDICTION ------------------
+if st.button("🔍 Analyze Emotion"):
     if review.strip():
-        vec = vectorizer.transform([review])
-        pred = model.predict(vec)[0]
-        st.success("Positive 😀" if pred == 1 else "Negative 😞")
+        predictions = emotion_classifier(review)[0]
+
+        # Sort emotions by confidence
+        predictions = sorted(
+            predictions,
+            key=lambda x: x["score"],
+            reverse=True
+        )
+
+        top_emotion = predictions[0]
+
+        st.success(
+            f"**Emotion:** {top_emotion['label'].capitalize()} \n\n"
+            f"**Confidence:** {top_emotion['score']:.2f}"
+        )
+
+        st.subheader("🔎 Emotion Breakdown")
+        for emo in predictions[:5]:
+            st.write(f"{emo['label'].capitalize()} : {emo['score']:.2f}")
+
     else:
-        st.warning("Please enter a review")
+        st.warning("Please enter a review to analyze.")
+
+# ------------------ FOOTER ------------------
+st.markdown("---")
+st.caption("Powered by Transformer (BERT) | HuggingFace | Streamlit")
